@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>T3C – Telco Churn Copilot</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+  <header class="topbar">
+    <h1>📊 T3C — Telco Churn Copilot</h1>
+    <a class="pill" href="/docs" target="_blank">API Docs</a>
+  </header>
+
+  <section class="controls">
+    <div class="field">
+      <label>Region (optional)</label>
+      <input id="region" placeholder="e.g., metro_north"/>
+    </div>
+    <div class="field">
+      <label>Limit</label>
+      <select id="limit">
+        <option>20</option><option>50</option><option selected>100</option><option>200</option>
+      </select>
+    </div>
+    <div class="field checkbox">
+      <input id="auto_fix" type="checkbox" checked/>
+      <label for="auto_fix">Auto add disclaimers</label>
+    </div>
+    <button id="loadBtn" class="primary">Load Insights</button>
+    <button id="approveSelectedBtn" class="success">Approve Selected</button>
+  </section>
+
+  <section class="table-wrap">
+    <table id="results">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="checkAll"/></th>
+          <th>Customer</th><th>Region</th>
+          <th>Final</th><th>CPI</th><th>Severity</th><th>CRS</th>
+          <th>Action</th><th>Compliance</th>
+          <th style="min-width:420px">Proposed Text (click to edit)</th>
+        </tr>
+      </thead>
+      <tbody><!-- rows injected by JS --></tbody>
+    </table>
+  </section>
+
+  <footer class="foot">
+    <div id="status"></div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
