@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from pydantic import BaseModel
+from fastapi.responses import FileResponse
 
 # project imports
 from app.langgraph_flow import run_stub_flow
@@ -13,6 +14,10 @@ from app.dataio import load_signals, latest_week
 from app.guardrails import check_message, add_disclaimers
 from app.analytics import severity_0_100, crs_0_1, final_risk, route_action
 from app.logger import append_action
+
+from fastapi.responses import FileResponse, JSONResponse
+import pandas as pd
+import os
 
 # -----------------------------------------------------------------------------
 # FastAPI app + WEBSITE (static & Jinja templates)
@@ -185,3 +190,106 @@ def log_actions(payload: List[dict] = Body(...)):
     for item in payload:
         append_action(item)
     return {"ok": True, "logged": len(payload)}
+
+@app.get("/admin/download/action_log.csv")
+def download_action_log():
+    return FileResponse("data/action_log.csv", media_type="text/csv", filename="action_log.csv")
+
+@app.get("/admin/download/top_risk")
+def download_top_risk(
+    region: Optional[str] = None,
+    format: str = "csv",        # csv | xlsx | json
+    limit: Optional[int] = None # None = no limit (all rows)
+):
+    # --- build the dataset (same logic as /insights/top_risk but file-friendly) ---
+    df = load_signals()
+    wk = latest_week()
+    sub = df[df["date"] == wk]
+    if region:
+        sub = sub[sub["region"].astype(str) == region]
+
+    rows = []
+    for _, r in sub.iterrows():
+        cid, reg = str(r["customer_id"]), str(r["region"])
+        cpi = int(r["CPI"])
+        sev = severity_0_100(cid, reg)
+        crs = crs_0_1(cid)
+        score = final_risk(cpi, sev, crs)
+        plan = route_action(cpi, sev, crs)
+        rows.append({
+            "customer_id": cid, "region": reg,
+            "CPI": cpi, "Severity": sev, "CRS": crs,
+            "final_score": score, "action": plan["action"],
+            "reason": plan["reason"], "proposed_text": plan["proposed_text"],
+            "estimated_action_cost_usd": plan["estimated_action_cost_usd"]
+        })
+
+    out = pd.DataFrame(rows).sort_values("final_score", ascending=False)
+    if limit is not None and limit > 0:
+        out = out.head(limit)
+
+    os.makedirs("data", exist_ok=True)
+
+    # --- return in requested format ---
+    fmt = format.lower()
+    if fmt == "json":
+        # return JSON array directly
+        return JSONResponse(out.to_dict(orient="records"))
+
+    if fmt == "xlsx" or fmt == "excel":
+        path = "data/top_risk_download.xlsx"
+        # index=False for a clean sheet
+        out.to_excel(path, index=False)
+        return FileResponse(
+            path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename="top_risk.xlsx"
+        )
+
+    # default = CSV
+    path = "data/top_risk_download.csv"
+    out.to_csv(path, index=False)
+    return FileResponse(path, media_type="text/csv", filename="top_risk.csv")
+
+from fastapi.responses import HTMLResponse
+import pandas as pd, os
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(request: Request):
+    log_path = "data/action_log.csv"
+    stats = {"logged": 0, "pass_rate": 0.0, "violations": 0}
+    trend = []
+    by_action = []
+
+    if os.path.exists(log_path):
+        df = pd.read_csv(log_path)
+        if not df.empty:
+            # coerce
+            df["ts"] = pd.to_datetime(df["ts"], errors="coerce")
+            if "pass" in df.columns:
+                # in CSV it might be string "True"/"False" → normalize to bool
+                df["pass"] = df["pass"].astype(str).str.lower().isin(["true","1","yes"])
+            df["date"] = df["ts"].dt.date
+
+            stats["logged"] = int(len(df))
+            stats["pass_rate"] = round(float(df["pass"].mean()*100) if len(df) else 0.0, 2)
+            stats["violations"] = int((~df["pass"]).sum())
+
+            trend = (
+                df.groupby("date")["pass"].mean().reset_index()
+                  .rename(columns={"pass":"pass_rate"})
+                  .assign(pass_rate=lambda x: (x["pass_rate"]*100).round(2))
+                  .tail(30)
+                  .to_dict(orient="records")
+            )
+            if "action" in df.columns:
+                by_action = (
+                    df.groupby("action").size().reset_index(name="count")
+                      .sort_values("count", ascending=False)
+                      .to_dict(orient="records")
+                )
+
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {"request": request, "stats": stats, "trend": trend, "by_action": by_action}
+    )

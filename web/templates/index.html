@@ -17,19 +17,28 @@
       <label>Region (optional)</label>
       <input id="region" placeholder="e.g., metro_north"/>
     </div>
+
     <div class="field">
-      <label>Limit</label>
-      <select id="limit">
-        <option>20</option><option>50</option><option selected>100</option><option>200</option>
-      </select>
-    </div>
+  <label>Download format</label>
+  <select id="dlFormat">
+    <option value="csv" selected>CSV</option>
+    <option value="xlsx">Excel (.xlsx)</option>
+    <option value="json">JSON</option>
+  </select>
+</div>
+<button id="downloadBtn" class="pill">⬇️ Download Top Risk</button>
     <div class="field checkbox">
       <input id="auto_fix" type="checkbox" checked/>
       <label for="auto_fix">Auto add disclaimers</label>
     </div>
     <button id="loadBtn" class="primary">Load Insights</button>
     <button id="approveSelectedBtn" class="success">Approve Selected</button>
+    <a class="pill" href="/admin/download/top_risk.csv" target="_blank">⬇️ Download Top Risk</a>
+    <a class="pill" href="/admin/download/action_log.csv" target="_blank">⬇️ Download Action Log</a>
+
+
   </section>
+
 
   <section class="table-wrap">
     <table id="results">
